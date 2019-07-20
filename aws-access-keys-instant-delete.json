@@ -1,0 +1,144 @@
+{
+	"AWSTemplateFormatVersion" : "2010-09-09",
+
+	"Description" : "Deletes IAM access keys as soon as they are created",
+
+	"Resources" : {
+		"LambdaExecutionRole": {
+			"Type" : "AWS::IAM::Role",
+			"Properties" : {
+				"AssumeRolePolicyDocument" : {
+					"Version" : "2012-10-17",
+					"Statement": [
+						{
+							"Effect": "Allow",
+							"Principal": {
+								"Service": [ "lambda.amazonaws.com" ]
+							},
+							"Action": [ "sts:AssumeRole" ]
+						}
+					]
+				},
+				"ManagedPolicyArns" : [
+					"arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+				],
+				"Policies" : [
+					{
+						"PolicyName": "iam-user-deletes",
+						"PolicyDocument": {
+							"Version" : "2012-10-17",
+							"Statement": [
+								{
+									"Effect": "Allow",
+									"Action": [
+										"iam:DeleteAccessKey"
+									],
+									"Resource": "*"
+								}
+							]
+						}
+					}
+				]
+			}
+		},
+
+		"LambdaEventHandler": {
+			"Type": "AWS::Lambda::Function",
+			"Properties": {
+				"Handler": "index.handler",
+				"Description": "Deletes IAM users and access keys on sight",
+				"Role": {
+					"Fn::GetAtt": [
+						"LambdaExecutionRole",
+						"Arn"
+					]
+				},
+				"Code": {
+					"ZipFile": {
+						"Fn::Join": [
+							"\n",
+							[
+								"var AWS = require('aws-sdk');",
+								"var iam = new AWS.IAM();",
+								"exports.handler = function(event, context, callback) {",
+								"if (event && event.detail && event.detail.eventName && event.detail.eventName == 'CreateAccessKey' && event.detail.responseElements && event.detail.responseElements.accessKey && event.detail.responseElements.accessKey.accessKeyId && event.detail.responseElements.accessKey.userName) {",
+								"var params = {AccessKeyId: event.detail.responseElements.accessKey.accessKeyId, UserName: event.detail.responseElements.accessKey.userName};",
+								"iam.deleteAccessKey(params, callback);",
+								"} else {",
+								"callback();",
+								"}",
+								"};"
+							]
+						]
+					}
+				},
+				"Runtime": "nodejs8.10",
+				"MemorySize": 128,
+				"Timeout": 25
+			}
+		},
+
+		"IAMRule": {
+			"Type" : "AWS::Events::Rule",
+			"Properties" : {
+				"Description" : "Send iam: Events to CloudSploit",
+				"EventPattern" : {
+					"source": [
+						"aws.iam"
+					],
+					"detail-type": [
+						"AWS API Call via CloudTrail"
+					],
+					"detail": {
+						"eventSource": [
+							"iam.amazonaws.com"
+						],
+						"eventName": [
+							"CreateUser",
+							"CreateAccessKey"
+						]
+					}
+				},
+				"Name" : "iam-user-creation-detection",
+				"State" : "ENABLED",
+				"Targets" : [
+					{
+						"Arn": {
+							"Fn::GetAtt": [
+								"LambdaEventHandler",
+								"Arn"
+							]
+						},
+						"Id": "lambda-trigger"
+					}
+				]
+			}
+		},
+		"InvokeLambdaPermission": {
+			"Type": "AWS::Lambda::Permission",
+			"Properties": {
+				"FunctionName": {
+					"Fn::GetAtt": [
+						"LambdaEventHandler",
+						"Arn"
+					]
+				},
+				"Action": "lambda:InvokeFunction",
+				"Principal": "events.amazonaws.com",
+				"SourceArn": {
+					"Fn::GetAtt": [
+						"IAMRule",
+						"Arn"
+					]
+				}
+			}
+		}
+	},
+
+	"Outputs" : {
+		"LambdaFunction" : {
+			"Description" 	: "The name of the Lambda function",
+			"Value"			: {"Ref" : "LambdaEventHandler"}
+		}
+	}
+}

@@ -1,5 +1,7 @@
 # aws-access-keys-instant-delete
 
+[<img src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png">](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/quickcreate?templateUrl=https%3A%2F%2Fs3.amazonaws.com%2Fconsole.cloudsploit.com%2Fother%2Faws-access-keys-instant-delete.json&stackName=iam-access-keys-delete)
+
 CloudFormation template that deploys the resources necessary to monitor for the creation of IAM user access keys and delete them within seconds of creation.
 
 * Lambda Function - Provides the compute necessary for deleting the access keys when triggered.
